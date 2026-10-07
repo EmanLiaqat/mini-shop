@@ -1,5 +1,7 @@
+
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useSearchParams } from "react-router-dom";
 import { fetchProducts } from "../features/products/productsSlice";
 import { selectCartCount, selectCartTotal } from "../features/cart/cartSlice";
 import ProductCard from "../components/ProductCard";
@@ -27,18 +29,62 @@ const Home = () => {
   const cartTotal = useSelector(selectCartTotal);
   const orderCount = useSelector((s) => s.orders.items.length);
 
+  const [params, setParams] = useSearchParams();
+  const activeCategory = params.get("category") || "All";
+  const searchQuery = params.get("q") || "";
+
+  // Local state for search input (so typing feels instant)
+  const [searchInput, setSearchInput] = useState(searchQuery);
   const [visible, setVisible] = useState(PRODUCTS_PER_PAGE);
 
   useEffect(() => {
     if (status === "idle") dispatch(fetchProducts());
   }, [status, dispatch]);
 
-  const visibleProducts = items.slice(0, visible);
-  const hasMore = visible < items.length;
+  // Reset pagination when filters change
+  useEffect(() => {
+    setVisible(PRODUCTS_PER_PAGE);
+  }, [activeCategory, searchQuery]);
+
+  // Sync search input if URL query changes externally
+  useEffect(() => {
+    setSearchInput(searchQuery);
+  }, [searchQuery]);
+
+  // Build category list
+  const categories = ["All", ...new Set(items.map((p) => p.category))];
+
+  // Filter products
+  const filtered = items.filter((p) => {
+    const matchesCategory =
+      activeCategory === "All" || p.category === activeCategory;
+    const matchesSearch = p.title
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
+
+  const visibleProducts = filtered.slice(0, visible);
+  const hasMore = visible < filtered.length;
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    const newParams = {};
+    if (searchInput.trim()) newParams.q = searchInput.trim();
+    if (activeCategory !== "All") newParams.category = activeCategory;
+    setParams(newParams);
+  };
+
+  const handleCategoryClick = (cat) => {
+    const newParams = {};
+    if (cat !== "All") newParams.category = cat;
+    if (searchQuery) newParams.q = searchQuery;
+    setParams(newParams);
+  };
 
   return (
     <div>
-      {/* ===== HERO (compact) ===== */}
+      {/* ===== HERO ===== */}
       <section className="bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 text-white">
         <div className="max-w-7xl mx-auto px-4 py-10 md:py-14">
           <div className="max-w-2xl">
@@ -54,12 +100,6 @@ const Home = () => {
             <p className="text-sm md:text-base text-white/70 mb-5 max-w-lg">
               Shop the latest trends in electronics, fashion, and more — delivered fast.
             </p>
-            <a
-              href="#products"
-              className="inline-block bg-white text-slate-900 font-semibold text-sm px-5 py-2.5 rounded-lg hover:bg-indigo-50 transition shadow-sm"
-            >
-              Start Shopping →
-            </a>
           </div>
         </div>
       </section>
@@ -96,21 +136,64 @@ const Home = () => {
 
       {/* ===== PRODUCTS ===== */}
       <section id="products" className="max-w-7xl mx-auto px-4 pb-14">
-        <div className="flex items-end justify-between mb-5">
-          <div>
-            <h2 className="text-xl md:text-2xl font-bold text-gray-800">
-              Featured Products
-            </h2>
-            <p className="text-gray-500 text-xs mt-0.5">
-              Handpicked just for you
-            </p>
-          </div>
-          {status === "succeeded" && (
-            <span className="text-xs text-gray-500">
-              Showing {visibleProducts.length} of {items.length}
-            </span>
-          )}
+        <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-1">
+          Our Products
+        </h2>
+        <p className="text-gray-500 text-xs mb-5">
+          Browse by category or search for anything
+        </p>
+
+        {/* Search Bar */}
+        <form onSubmit={handleSearchSubmit} className="flex gap-2 mb-4">
+          <input
+            type="text"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search products (shirt, bracelet, chair...)"
+            className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
+          />
+          <button
+            type="submit"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-5 py-2.5 rounded-xl shadow-sm hover:shadow-md transition"
+          >
+            Search
+          </button>
+        </form>
+
+        {/* Category pills */}
+        <div className="flex flex-wrap gap-2 mb-5">
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => handleCategoryClick(cat)}
+              className={`px-4 py-1.5 rounded-full text-xs font-medium border transition capitalize ${
+                activeCategory === cat
+                  ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                  : "bg-white text-gray-700 border-gray-200 hover:border-indigo-300 hover:text-indigo-600"
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
         </div>
+
+        {/* Results info */}
+        {status === "succeeded" && (
+          <p className="text-xs text-gray-500 mb-4">
+            Showing {visibleProducts.length} of {filtered.length}{" "}
+            {filtered.length === 1 ? "product" : "products"}
+            {activeCategory !== "All" && (
+              <>
+                {" "}in <span className="font-medium text-indigo-600">{activeCategory}</span>
+              </>
+            )}
+            {searchQuery && (
+              <>
+                {" "}matching "<span className="font-medium">{searchQuery}</span>"
+              </>
+            )}
+          </p>
+        )}
 
         {status === "loading" && <Loader label="Loading products..." />}
 
@@ -118,7 +201,26 @@ const Home = () => {
           <ErrorMessage message={error} onRetry={() => dispatch(fetchProducts())} />
         )}
 
-        {status === "succeeded" && (
+        {status === "succeeded" && filtered.length === 0 && (
+          <div className="text-center py-16 bg-white rounded-2xl border border-gray-100">
+            <p className="text-5xl mb-3">🔍</p>
+            <p className="text-gray-600 font-medium mb-1">No products found</p>
+            <p className="text-sm text-gray-400 mb-4">
+              Try a different search or category
+            </p>
+            <button
+              onClick={() => {
+                setParams({});
+                setSearchInput("");
+              }}
+              className="text-sm text-indigo-600 hover:underline"
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
+
+        {status === "succeeded" && filtered.length > 0 && (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
               {visibleProducts.map((p) => (
@@ -135,14 +237,14 @@ const Home = () => {
                   Load More Products ↓
                 </button>
                 <p className="text-xs text-gray-400 mt-2">
-                  {items.length - visible} more available
+                  {filtered.length - visible} more available
                 </p>
               </div>
             )}
 
-            {!hasMore && items.length > 0 && (
+            {!hasMore && (
               <p className="text-center text-gray-400 text-sm mt-10">
-                🎉 You've seen all {items.length} products!
+                🎉 You've seen all {filtered.length} products!
               </p>
             )}
           </>

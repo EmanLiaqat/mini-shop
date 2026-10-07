@@ -1,9 +1,15 @@
+import Navbar from "./components/Navbar";
+import Loader from "./components/Loader";
+import ErrorMessage from "./components/ErrorMessage";
+
 function App() {
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-      <h1 className="text-3xl font-bold text-indigo-600">
-        🛍️ MiniShop is working!
-      </h1>
+    <div className="min-h-screen bg-gray-50">
+      <Navbar />
+      <div className="p-6 space-y-6">
+        <Loader label="Testing loader..." />
+        <ErrorMessage message="Test error message" onRetry={() => alert("retry")} />
+      </div>
     </div>
   );
 }
